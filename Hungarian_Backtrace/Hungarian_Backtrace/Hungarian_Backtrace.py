@@ -111,11 +111,11 @@ class KM_Backtrack():
         # subtract it from every element in its row.
         state.C -= state.C.min(axis=1)[:, np.newaxis]
         # Step 2: Find a zero (Z) in the resulting matrix. If there is no
-        # starred zero in its row or column, star Z. Repeat for each element
-        # in the matrix.
+        # starred zero in its row or column, star Z and mark related zeros as unavailable. 
+        # Repeat for each element in the matrix.
         for i, j in zip(*np.where(state.C == 0)):
-            if state.col_uncovered[j] and state.row_uncovered[i]:
-                state.marked[i, j] = 1
+            if state.col_uncovered[j] and state.row_uncovered[i] and state.available[i,j]:
+                state._star(i, j)
                 state.col_uncovered[j] = False
                 state.row_uncovered[i] = False
 
@@ -148,16 +148,17 @@ class KM_Backtrack():
         C = (state.C == 0).astype(int)
         covered_C = C * state.row_uncovered[:, np.newaxis]
         covered_C *= np.asarray(state.col_uncovered, dtype=int)
+        covered_C *= (state.available).astype(int)
         n = state.C.shape[0]
         m = state.C.shape[1]
 
         while True:
-            # Find an uncovered zero
+            # Find an uncovered, available zero
             row, col = np.unravel_index(np.argmax(covered_C), (n, m))
             if covered_C[row, col] == 0:
                 return _step6
             else:
-                state.marked[row, col] = 2
+                state._prime(row, col)
                 # Find the first starred element in the row
                 star_col = np.argmax(state.marked[row] == 1)
                 if state.marked[row, star_col] != 1:
@@ -170,7 +171,8 @@ class KM_Backtrack():
                     state.row_uncovered[row] = False
                     state.col_uncovered[col] = True
                     covered_C[:, col] = C[:, col] * (
-                        np.asarray(state.row_uncovered, dtype=int))
+                        np.asarray(state.row_uncovered, dtype=int)) * (
+                        state.available[:, col])
                     covered_C[row] = 0
 
 
@@ -215,8 +217,9 @@ class KM_Backtrack():
         for i in range(count + 1):
             if state.marked[path[i, 0], path[i, 1]] == 1:
                 state.marked[path[i, 0], path[i, 1]] = 0
+                state._set_related_available(path[i, 0], path[i, 1])
             else:
-                state.marked[path[i, 0], path[i, 1]] = 1
+                state._star(path[i, 0], path[i, 1])
 
         state._clear_covers()
         # Erase all prime markings
@@ -256,7 +259,8 @@ class _Hungary(object):
             self._expand_cost_matrix()
 
             self.k = self.C.shape[0]
-                        
+            
+            self.available = np.ones((k,k), dtype=bool)            
             self.row_uncovered = np.ones(self.k, dtype=bool)
             self.col_uncovered = np.ones(self.k, dtype=bool)
             self.Z0_r = 0
@@ -269,7 +273,7 @@ class _Hungary(object):
             self.row_uncovered[:] = True
             self.col_uncovered[:] = True
 
-        def _expand_cost_matrix():
+        def _expand_cost_matrix(self):
             """
             Expands matrix C into a KxK matrix where K is the sum of availble agent slots 
             for tasks (the sum of the elements of La).  It does this in 3 steps:
@@ -304,6 +308,11 @@ class _Hungary(object):
                  [1,2,2,2,0],
                  [1,2,2,2,0]]
             """
+            self.C = np.repeat(self.C, self.L, axis=1)  #step 1
+            self.C = np.repeat(self.C, self.La, axis=0)  #step 2
+            zero_cols = np.zeros((self.C.shape[0],self.C.shape[0]-self.C.shape[1]),dtype=int)
+            self.C = np.hstack((self.C,zero_cols)) #step 3
+
             self.agent_row_lookup = range(self.m)
             self.task_column_lookup = range(self.n)
 
@@ -311,9 +320,47 @@ class _Hungary(object):
             self.task_column_lookup = np.repeat(self.task_column_lookup,self.L)
 
             self.task_columns = {}
+            self.agent_rows = {}
 
-            self.C = np.repeat(self.C, self.L, axis=1)  #step 1
-            self.C = np.repeat(self.C, self.La, axis=0)  #step 2
-            zero_cols = np.zeros((self.C.shape[0],self.C.shape[0]-self.C.shape[1]),dtype=int)
-            self.C = np.hstack((self.C,zero_cols)) #step 3
+            for i,_ in enumerate(self.La): 
+                self.agent_rows[i]=np.where(self.agent_row_lookup==i)
+            for j,_ in enumerate(self.L):
+                self.task_columns[j]=np.where(self.task_column_lookup==j)
+
+        def _set_related_unavailable(self,row,col):
+            """Sets 'related' cells (same agent, same task, just on different columns and rows) to 
+            unavailable so that the same agent can't be assigned to the same task more than once.
+
+            Parameters:
+            row - row of agent
+            col - column of task
+            """
+            agent = agent_row_lookup[row]
+            task = task_column_lookup[col]
+
+            related_rows = np.delete(agent_rows[agent],np.where(agent_rows[agent]==row)) #the related rows, excluding the current row
+            related_cols = np.delete(task_columns[task],np.where(task_columns[task]==col)) #the related cols, excluding the current col
+            for i,j in zip(related_rows,related_cols):
+                if self.marked[i,j]!=1:
+                    self.available[i,j] = False
+
+        def _make_all_available(self):
+            self.available[:,:] = True
+
+        def _set_related_available(self,i,j):
+            related_rows = agent_rows[agent] #the related rows
+            related_cols = task_columns[task] #the related cols
+            self.available[related_rows[0]:related_rows[-1]+1,related_cols[0]:related_cols[-1]+1] = True
+
+        def _star(self,i,j):
+            self.marked[i,j]=1
+            self._set_related_unavailable(i,j)
+
+        def _prime(self,i,j):
+            self.marked[i,j]=2
+            self._set_related_unavailable(i,j)
+
+
+
+            
 
