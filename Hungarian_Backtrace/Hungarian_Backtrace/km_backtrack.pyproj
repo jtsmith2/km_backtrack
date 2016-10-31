@@ -6,12 +6,12 @@
     <ProjectGuid>62197ca6-4455-42da-8279-b8a4045618ba</ProjectGuid>
     <ProjectHome>
     </ProjectHome>
-    <StartupFile>Hungarian_Backtrack.py</StartupFile>
+    <StartupFile>km_backtrack.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
-    <Name>Hungarian_Backtrack</Name>
+    <Name>km_backtrack</Name>
     <RootNamespace>Hungarian_Backtrace</RootNamespace>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -23,7 +23,7 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Hungarian_Backtrack.py" />
+    <Compile Include="km_backtrack.py" />
   </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
