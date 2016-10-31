@@ -229,8 +229,7 @@ def _step5(state):
     # Convert paths
     for i in range(count + 1):
         if state.marked[path[i, 0], path[i, 1]] == 1:
-            state.marked[path[i, 0], path[i, 1]] = 0
-            state._set_related_available(path[i, 0], path[i, 1])
+            state._unstar(path[i, 0], path[i, 1])
         else:
             state._star(path[i, 0], path[i, 1])
 
@@ -398,6 +397,10 @@ class _Hungary(object):
         def _star(self,i,j):
             self.marked[i,j]=1
             self._set_related_unavailable(i,j)
+
+        def _unstar(self,i,j):
+            state.marked[i, j] = 0
+            state._set_related_available(i, j)
 
         def _prime(self,i,j):
             self.marked[i,j]=2
