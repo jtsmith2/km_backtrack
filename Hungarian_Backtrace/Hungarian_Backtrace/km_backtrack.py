@@ -102,8 +102,6 @@ def kmb(cost_matrix, ability_vector, task_vector):
         marked = state.marked
     assignments = np.where(marked == 1)
 
-    print zip(*assignments)
-
     for i,agent in enumerate(assignments[0]):
         assignments[0][i] = state.agent_row_lookup[agent]
     for j,task in enumerate(assignments[1]):
