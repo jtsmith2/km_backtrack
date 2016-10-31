@@ -87,7 +87,7 @@ def kmb(cost_matrix, ability_vector, task_vector):
     else:
         transposed = False
 
-    state = _Hungary(cost_matrix, task_vector, ability_vector)
+    state = _HungaryBacktrack(cost_matrix, task_vector, ability_vector)
 
     # No need to bother with assignments if one of the dimensions
     # of the cost matrix is zero-length.
@@ -255,7 +255,7 @@ def _step6(state):
         state.C[np.where(state.C<0)]=0
     return _step4
 
-class _Hungary(object):
+class _HungaryBacktrack(object):
         """State of the Hungarian algorithm.
 
         Parameters
