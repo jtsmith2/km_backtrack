@@ -2,6 +2,7 @@
 # problem. Taken from scikit-learn. Based on original code by Brian Clapper,
 # adapted to NumPy by Gael Varoquaux.
 # Further improvements by Ben Root, Vlad Niculae and Lars Buitinck.
+# Adaptation to Kuhn-Munkres with Backtracking by Taylor Smith
 #
 # Copyright (c) 2008 Brian M. Clapper <bmc@clapper.org>, Gael Varoquaux
 # Author: Brian M. Clapper, Gael Varoquaux
@@ -10,7 +11,7 @@
 import numpy as np
 
 def kmb(cost_matrix, ability_vector, task_vector):
-    """Solve the many-to-many assignment problem.
+    """Solves the many-to-many assignment problem.
 
     The method used is the Hungarian algorithm, also known as the Munkres or
     Kuhn-Munkres algorithm that has been modified to allow backtracking to 
@@ -39,22 +40,22 @@ def kmb(cost_matrix, ability_vector, task_vector):
         An array of row indices and one of corresponding column indices giving
         the optimal assignment. The cost of the assignment can be computed
         as ``cost_matrix[row_ind, col_ind].sum()``. The row indices will be
-        sorted; in the case of a square cost matrix they will be equal to
-        ``numpy.arange(cost_matrix.shape[0])``.
+        sorted.
 
     Notes
     -----
-    .. versionadded:: 0.17.0
+    .. versionadded:: 0.1.0
 
     Examples
     --------
-    >>> cost = np.array([[4, 1, 3], [2, 0, 5], [3, 2, 2]])
-    >>> from scipy.optimize import linear_sum_assignment
-    >>> row_ind, col_ind = linear_sum_assignment(cost)
-    >>> col_ind
-    array([1, 0, 2])
-    >>> cost[row_ind, col_ind].sum()
-    5
+    >>> c = np.array([[3,0,1,2],[2,3,0,1],[3,0,1,2],[1,0,2,3]])
+    >>> La = [2,2,2,2]
+    >>> L = [2,2,2,2]
+    >>> agents,tasks = kmb(c,La,L)
+    >>> zip(agents,tasks)
+    array([(0, 3), (0, 0), (1, 2), (1, 3), (2, 1), (2, 2), (3, 0), (3, 1)])
+    >>> c[agents,tasks].sum()
+    8
 
     References
     ----------
@@ -100,6 +101,8 @@ def kmb(cost_matrix, ability_vector, task_vector):
     else:
         marked = state.marked
     assignments = np.where(marked == 1)
+
+    print zip(*assignments)
 
     for i,agent in enumerate(assignments[0]):
         assignments[0][i] = state.agent_row_lookup[agent]
@@ -245,10 +248,14 @@ def _step6(state):
     """
     # the smallest uncovered value in the matrix
     if np.any(state.row_uncovered) and np.any(state.col_uncovered):
-        minval = np.min(state.C[state.row_uncovered], axis=0)
-        minval = np.min(minval[state.col_uncovered])
+        M = state.C.copy()
+        maxval = np.max(M)
+        M[np.where(state.available==0)] = maxval
+        minval = np.min(M[state.row_uncovered], axis=0)
+        minval = np.min(minval[state.col_uncovered]) #selects the smallest value that is greater than zero
         state.C[~state.row_uncovered] += minval
         state.C[:, state.col_uncovered] -= minval
+        state.C[np.where(state.C<0)]=0
     return _step4
 
 class _Hungary(object):
@@ -277,6 +284,26 @@ class _Hungary(object):
             self.Z0_c = 0
             self.path = np.zeros((2*self.k, 2), dtype=int)
             self.marked = np.zeros((self.k, self.k), dtype=int)
+
+        def __repr__(self):
+            M = self.C.astype(np.string_)
+            M[np.where(self.marked==1)] = np.char.add( M[np.where(self.marked==1)],'*')
+            M[np.where(self.marked==2)] = np.char.add( M[np.where(self.marked==2)],"'")
+            M[np.where(self.available==0)] = np.char.add( M[np.where(self.available==0)],'x')
+            z = np.zeros((self.k,1),dtype=np.string_)
+            M = np.hstack((z,M))
+            z = np.zeros((1,self.k+1),dtype=np.string_)
+            M = np.vstack((z,M))
+            M[0,:] = ''
+            M[:,0] = ''
+            for i,uc in enumerate(self.row_uncovered):
+                if uc == 0:
+                    M[i+1,0] = 'c'
+            for j,uc in enumerate(self.col_uncovered):
+                if uc == 0:
+                    M[0,j+1] = 'c'
+
+            return str(M)
 
         def _clear_covers(self):
             """Clear all covered matrix cells"""
@@ -320,7 +347,7 @@ class _Hungary(object):
             """
             self.C = np.repeat(self.C, self.L, axis=1)  #step 1
             self.C = np.repeat(self.C, self.La, axis=0)  #step 2
-            zero_cols = np.zeros((self.C.shape[0],self.C.shape[0]-self.C.shape[1]),dtype=int)
+            zero_cols = np.ones((self.C.shape[0],self.C.shape[0]-self.C.shape[1]),dtype=int)*(np.max(self.C)+1)
             self.C = np.hstack((self.C,zero_cols)) #step 3
 
             self.agent_row_lookup = range(self.m)
@@ -349,11 +376,12 @@ class _Hungary(object):
                 agent = self.agent_row_lookup[row]
                 task = self.task_column_lookup[col]
 
-                related_rows = np.delete(self.agent_rows[agent],np.where(self.agent_rows[agent]==row)) #the related rows, excluding the current row
-                related_cols = np.delete(self.task_columns[task],np.where(self.task_columns[task]==col)) #the related cols, excluding the current col
-                for i,j in zip(related_rows,related_cols):
-                    if self.marked[i,j]!=1:
-                        self.available[i,j] = False
+                related_rows = np.delete(self.agent_rows[agent],np.where(self.agent_rows[agent]==row)[1]) #the related rows, excluding the current row
+                related_cols = np.delete(self.task_columns[task],np.where(self.task_columns[task]==col)[1]) #the related cols, excluding the current col
+                for i in related_rows:
+                    for j in related_cols:
+                        if self.marked[i,j]!=1:
+                            self.available[i,j] = False
 
         def _make_all_available(self):
             self.available[:,:] = True
@@ -378,10 +406,17 @@ class _Hungary(object):
 
 if __name__ == "__main__":
     c = np.array([[3,0,1,2],[2,3,0,1],[3,0,1,2],[1,0,2,3]])
-    La = [3,3,3,3]
+    La = [2,2,2,2]
     L = [2,2,2,2]
+    c = np.power(c,1)
 
     agents,tasks = kmb(c,La,L)
-    #print "Cost:", c[agents,tasks].sum()
+    cost = c[agents,tasks].sum()
+    #for agent, task in zip(agents,tasks):
+    #    if task < 0:
+    #        cost += np.max(c)
+    #    else:
+    #        cost += c[agent,task]
+    print "Cost:", cost
     print zip(agents,tasks)
 
